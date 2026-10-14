@@ -1,0 +1,401 @@
+<title>Houston Matchbox Hunt</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/*LEAFLET_CSS*/
+</style>
+<style>
+/* Layout: one-screen app. Map fills the left; a "striker strip" panel lists every spot by neighborhood. Stacks map-over-list on phones. */
+:root {
+  --bg: #e9ebee;
+  --panel: #f7f7f5;
+  --ink: #1b1f27;
+  --muted: #5d6573;
+  --line: #d4d7dc;
+  --land: #e4e2dc;
+  --road: #ffffff;
+  --road-edge: #c9c4b8;
+  --water: #a9c6dc;
+  --head: #c8341c;        /* match-head red: still stocked */
+  --head-ink: #ffffff;
+  --sulfur: #e2a81e;      /* collected */
+  --out: #8d939c;         /* reported out */
+  --strip: repeating-linear-gradient(90deg, #4a3a2e 0 3px, #5b4838 3px 5px);
+  --chip: #ffffff;
+  --display: "Alfa Slab One", "Rockwell", Georgia, serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12151b; --panel: #181c23; --ink: #eceef2; --muted: #9aa2b1; --line: #2a303b;
+  --land: #1c2028; --road: #39404c; --road-edge: #2b313b; --water: #23415a;
+  --head: #e5533a; --head-ink: #ffffff; --sulfur: #f0bb3a; --out: #6b7280; --chip: #222832;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #12151b; --panel: #181c23; --ink: #eceef2; --muted: #9aa2b1; --line: #2a303b;
+  --land: #1c2028; --road: #39404c; --road-edge: #2b313b; --water: #23415a;
+  --head: #e5533a; --head-ink: #ffffff; --sulfur: #f0bb3a; --out: #6b7280; --chip: #222832;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; }
+.app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: auto minmax(0, 1fr); }
+header {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px;
+  padding-block: 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--panel); border-bottom: 1px solid var(--line); position: relative;
+}
+header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 4px; background: var(--strip); }
+h1 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 22px; letter-spacing: .01em; line-height: 1.1; text-wrap: balance; }
+h1 span { color: var(--head); }
+.tally { display: flex; gap: 18px; flex-wrap: wrap; margin-left: auto; font-variant-numeric: tabular-nums; }
+.tally div { display: flex; flex-direction: column; }
+.tally b { font-family: var(--display); font-weight: 400; font-size: 20px; line-height: 1; }
+.tally small { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.tally .got b { color: var(--sulfur); }
+.tally .live b { color: var(--head); }
+#map { background: var(--land); min-height: 0; }
+aside { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.controls { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+#q { width: 100%; box-sizing: border-box; font: inherit; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--chip); color: var(--ink); }
+#q:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--head); outline-offset: 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 12.5px; font-weight: 600; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip); color: var(--ink); cursor: pointer; }
+.chips button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.list { overflow-y: auto; flex: 1; min-height: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+.hood { position: sticky; top: 0; z-index: 1; background: var(--panel); padding: 10px 16px 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); }
+.row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.row:hover, .row.sel { background: color-mix(in srgb, var(--head) 7%, transparent); }
+.row .nm { font-weight: 600; line-height: 1.25; }
+.row .nm em { font-style: normal; font-weight: 500; color: var(--muted); font-size: 12px; }
+.row .ad { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.row.out .nm { color: var(--muted); }
+.pill { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 3px 7px; border-radius: 4px; white-space: nowrap; }
+.pill.live { background: color-mix(in srgb, var(--head) 14%, transparent); color: var(--head); }
+.pill.out { background: color-mix(in srgb, var(--out) 18%, transparent); color: var(--muted); }
+.pill.got { background: color-mix(in srgb, var(--sulfur) 22%, transparent); color: color-mix(in srgb, var(--sulfur) 55%, var(--ink)); }
+/* the "box" toggle: a tiny matchbox, filled when collected */
+.box { width: 24px; height: 18px; margin-top: 1px; border-radius: 3px; border: 2px solid var(--ink); background: transparent; position: relative; cursor: pointer; padding: 0; }
+.box::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--strip); opacity: .6; }
+.box[aria-pressed="true"] { background: var(--sulfur); border-color: var(--sulfur); }
+.box[aria-pressed="true"]::after { content: ""; position: absolute; left: 7px; top: 3px; width: 5px; height: 9px; border: solid var(--ink); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+.empty { padding: 28px 16px; color: var(--muted); }
+.foot { padding: 10px 16px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line); line-height: 1.45; }
+.foot .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: -1px; margin: 0 3px 0 8px; }
+.foot .dot:first-child { margin-left: 0; }
+
+/* pins */
+.pin { width: 18px; height: 18px; border-radius: 50%; background: var(--head); border: 2.5px solid var(--panel); box-shadow: 0 1px 4px rgb(0 0 0 / .35); box-sizing: border-box; }
+.pin.out { background: var(--panel); border: 2.5px dashed var(--out); box-shadow: none; }
+.pin.got { background: var(--sulfur); }
+.pin.sel { outline: 3px solid var(--ink); outline-offset: 1px; }
+.pin.drag { cursor: move; outline: 3px dashed var(--head); outline-offset: 2px; }
+.hood-label { font-family: var(--display); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); opacity: .55; white-space: nowrap; background: none; border: 0; }
+.road-label { font: 700 10px var(--body); color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; white-space: nowrap; }
+
+/* popup */
+.leaflet-popup-content-wrapper { background: var(--panel); color: var(--ink); border-radius: 10px; }
+.leaflet-popup-tip { background: var(--panel); }
+.leaflet-popup-content { margin: 14px 16px; font-family: var(--body); font-size: 13.5px; line-height: 1.4; min-width: 220px; }
+.leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
+.pop h3 { margin: 0 0 2px; font-family: var(--display); font-weight: 400; font-size: 17px; line-height: 1.15; }
+.pop .k { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.pop .a { font-family: var(--mono); font-size: 12px; margin: 8px 0 6px; }
+.pop .n { margin: 0 0 6px; }
+.pop .warn { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+.pop .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.pop .acts button, .pop .acts a { font: 600 12.5px var(--body); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--chip); color: var(--ink); cursor: pointer; text-decoration: none; }
+.pop .acts .primary { background: var(--head); color: var(--head-ink); border-color: var(--head); }
+.pop .acts .primary.on { background: var(--sulfur); border-color: var(--sulfur); color: #1b1f27; }
+.leaflet-control-zoom a { background: var(--panel) !important; color: var(--ink) !important; border-color: var(--line) !important; }
+.leaflet-control-attribution { background: color-mix(in srgb, var(--panel) 80%, transparent) !important; color: var(--muted) !important; }
+.leaflet-control-attribution a { color: var(--muted) !important; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--panel); padding: 9px 14px; border-radius: 8px; font-weight: 600; z-index: 1000; font-size: 13px; }
+
+@media (max-width: 760px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 48% minmax(0, 1fr); }
+  aside { border-left: 0; border-top: 1px solid var(--line); }
+  h1 { font-size: 19px; }
+  .tally { margin-left: 0; gap: 14px; }
+  .tally b { font-size: 17px; }
+  .row, .hood, .controls, .foot { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) { .leaflet-fade-anim .leaflet-popup, .leaflet-zoom-anim .leaflet-zoom-animated { transition: none !important; } }
+</style>
+
+<div class="app">
+  <header>
+    <h1>Houston <span>Matchbox</span> Hunt</h1>
+    <div class="tally" aria-live="polite">
+      <div class="got"><b id="tGot">0</b><small>Collected</small></div>
+      <div class="live"><b id="tLive">0</b><small>Still stocked</small></div>
+      <div><b id="tOut">0</b><small>Reported out</small></div>
+    </div>
+  </header>
+  <div id="map" role="application" aria-label="Map of Houston matchbox spots"></div>
+  <aside>
+    <div class="controls">
+      <input id="q" type="search" placeholder="Search a name, street or neighborhood" aria-label="Search">
+      <div class="chips" role="group" aria-label="Filter">
+        <button data-f="todo" aria-pressed="true">To get</button>
+        <button data-f="all" aria-pressed="false">All</button>
+        <button data-f="got" aria-pressed="false">Collected</button>
+        <button data-f="out" aria-pressed="false">Reported out</button>
+      </div>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="foot" id="foot">
+      <span class="dot" style="background:var(--head)"></span>Still stocked
+      <span class="dot" style="background:var(--sulfur)"></span>Collected
+      <span class="dot" style="border:2px dashed var(--out);box-sizing:border-box"></span>Reported out
+      <div id="saveNote"></div>
+    </div>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+/*PLACES_JS*/
+</script>
+<script>
+/*ROADS_JS*/
+</script>
+<script>
+(() => {
+  const P = window.PLACES;
+  const byId = Object.fromEntries(P.map(p => [p.id, p]));
+  const state = { collected: {}, pins: {}, filter: "todo", q: "", sel: null, dragging: null };
+
+  // ---------- storage: artifact db when available, else this browser ----------
+  const LS = "houston-matchbox-v1";
+  const local = {
+    load() { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch { return {}; } },
+    save() { try { localStorage.setItem(LS, JSON.stringify({ collected: state.collected, pins: state.pins })); } catch {} },
+  };
+  const saved = local.load();
+  state.collected = saved.collected || {};
+  state.pins = saved.pins || {};
+  let db = null, canWrite = true;
+  const saveNote = document.getElementById("saveNote");
+  saveNote.textContent = "Progress is saved in this browser.";
+
+  async function connectDb() {
+    if (!window.claude?.use) return;
+    try { db = await window.claude.use("db"); } catch { db = null; }
+    if (!db) return;
+    saveNote.textContent = "Progress syncs to your account.";
+    db.collection("collected").onSnapshot(snap => {
+      const next = {};
+      snap.docs.forEach(d => { if (d.exists) next[d.id] = d.data().at || true; });
+      // first sync: carry over anything ticked before the db answered
+      if (!connectDb.seeded) {
+        connectDb.seeded = true;
+        for (const id of Object.keys(state.collected)) if (!next[id] && byId[id]) { next[id] = state.collected[id]; write("collected", id, { at: state.collected[id] }); }
+      }
+      state.collected = next; local.save(); render();
+    }, () => {});
+    db.collection("pins").onSnapshot(snap => {
+      const next = {};
+      snap.docs.forEach(d => { if (d.exists) { const v = d.data(); if (typeof v.lat === "number") next[d.id] = [v.lat, v.lng]; } });
+      state.pins = next; local.save(); placeMarkers();
+    }, () => {});
+  }
+  function write(col, id, data) {
+    if (!db || !canWrite) return;
+    const ref = db.collection(col).doc(id);
+    (data ? ref.set(data) : ref.delete()).catch(e => {
+      if (e?.code === "invalid_argument") { canWrite = false; saveNote.textContent = "You can view this map, but changes only save in your browser."; }
+    });
+  }
+
+  // ---------- derived ----------
+  const isOut = p => !!p.gone;
+  const isGot = p => !!state.collected[p.id];
+  const where = p => state.pins[p.id] || [p.lat, p.lng];
+  function status(p) { return isGot(p) ? "got" : isOut(p) ? "out" : "live"; }
+  function visible(p) {
+    const f = state.filter;
+    if (f === "todo" && (isGot(p) || isOut(p))) return false;
+    if (f === "got" && !isGot(p)) return false;
+    if (f === "out" && !isOut(p)) return false;
+    if (state.q) {
+      const hay = (p.name + " " + p.addr + " " + p.hood + " " + (p.kind || "") + " " + (p.inside || "")).toLowerCase();
+      if (!state.q.split(/\s+/).every(t => hay.includes(t))) return false;
+    }
+    return true;
+  }
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const gmaps = p => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.name + ", " + p.addr + ", Houston, TX");
+
+  // ---------- map ----------
+  const map = L.map("map", { zoomControl: true, preferCanvas: false, minZoom: 10, maxZoom: 18 }).setView([29.765, -95.42], 12);
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const base = L.layerGroup().addTo(map);
+  function drawBase() {
+    base.clearLayers();
+    const R = window.ROADS;
+    L.polyline(R.bayou, { color: css("--water"), weight: 4, opacity: .9, interactive: false }).addTo(base);
+    R.streets.forEach(s => L.polyline(s.pts, { color: css("--road"), weight: 3, opacity: 1, interactive: false }).addTo(base));
+    const fw = [R.loop, ...R.freeways.map(f => f.pts)];
+    fw.forEach(pts => L.polyline(pts, { color: css("--road-edge"), weight: 8, opacity: 1, interactive: false }).addTo(base));
+    fw.forEach(pts => L.polyline(pts, { color: css("--road"), weight: 5, opacity: 1, interactive: false }).addTo(base));
+    const lbl = (txt, at, cls) => L.marker(at, { interactive: false, keyboard: false, icon: L.divIcon({ className: cls, html: esc(txt), iconSize: null }) }).addTo(base);
+    R.labels.forEach(([t, la, ln]) => lbl(t, [la, ln], "hood-label"));
+    R.freeways.forEach(f => lbl(f.name, f.pts[1], "road-label"));
+    lbl("610", R.loop[1], "road-label");
+    R.streets.forEach(s => lbl(s.name, s.pts[s.pts.length - 2], "road-label"));
+  }
+  drawBase();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", drawBase);
+  new MutationObserver(drawBase).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  // Real streets where the browser is allowed to load them (outside claude.ai).
+  const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+    subdomains: "abcd", maxZoom: 19,
+  });
+  tiles.once("tileload", () => {
+    map.removeLayer(base);
+    map.attributionControl.addAttribution('&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>');
+  });
+  tiles.addTo(map);
+
+  const markers = {};
+  function icon(p) {
+    const cls = ["pin", status(p)];
+    if (state.sel === p.id) cls.push("sel");
+    if (state.dragging === p.id) cls.push("drag");
+    return L.divIcon({ className: "", html: `<div class="${cls.join(" ")}"></div>`, iconSize: [18, 18], iconAnchor: [9, 9], popupAnchor: [0, -10] });
+  }
+  function placeMarkers() {
+    P.forEach(p => {
+      let m = markers[p.id];
+      if (!m) {
+        m = markers[p.id] = L.marker(where(p), { icon: icon(p), title: p.name, riseOnHover: true });
+        m.bindPopup(() => popup(p), { autoPanPadding: [30, 30] });
+        m.on("popupopen", () => select(p.id, false));
+        m.on("dragend", () => {
+          const ll = m.getLatLng();
+          state.pins[p.id] = [ll.lat, ll.lng]; local.save();
+          write("pins", p.id, { lat: ll.lat, lng: ll.lng });
+          m.dragging.disable(); state.dragging = null; m.setIcon(icon(p));
+          toast("Pin moved for " + p.name);
+        });
+      } else if (state.dragging !== p.id) m.setLatLng(where(p));
+      m.setIcon(icon(p));
+      const show = visible(p) || state.sel === p.id;
+      if (show && !map.hasLayer(m)) m.addTo(map);
+      if (!show && map.hasLayer(m)) map.removeLayer(m);
+      m.setZIndexOffset(state.sel === p.id ? 1000 : status(p) === "live" ? 100 : 0);
+    });
+  }
+
+  function popup(p) {
+    const el = document.createElement("div");
+    el.className = "pop";
+    const got = isGot(p);
+    const siblings = P.filter(o => o.id !== p.id && o.addr === p.addr).map(o => o.name);
+    el.innerHTML = `
+      <div class="k">${esc(p.hood)}${p.kind ? " · " + esc(p.kind) : ""}</div>
+      <h3>${esc(p.name)}</h3>
+      ${p.inside ? `<div class="k">Inside ${esc(p.inside)}</div>` : ""}
+      <div class="a">${esc(p.addr)}</div>
+      <p class="n">${esc(p.note)}.</p>
+      ${p.gone ? `<p class="n"><strong>Reported out of matches, ${esc(p.gone)}.</strong> Worth asking anyway.</p>` : ""}
+      ${siblings.length ? `<p class="warn">Same address: ${siblings.map(esc).join(", ")}.</p>` : ""}
+      ${p.approx && !state.pins[p.id] ? `<p class="warn">Pin is an estimate. Use Directions for the exact spot, or Move pin to fix it.</p>` : ""}
+      <div class="acts">
+        <button class="primary ${got ? "on" : ""}" data-a="toggle">${got ? "Collected ✓" : "Mark collected"}</button>
+        <a href="${gmaps(p)}" target="_blank" rel="noopener">Directions</a>
+        <button data-a="move">Move pin</button>
+        ${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">Website</a>` : ""}
+      </div>`;
+    el.addEventListener("click", e => {
+      const a = e.target.closest("[data-a]")?.dataset.a;
+      if (a === "toggle") { toggle(p.id); markers[p.id].setPopupContent(popup(p)); }
+      if (a === "move") {
+        const m = markers[p.id];
+        m.closePopup(); state.dragging = p.id; m.setIcon(icon(p)); m.dragging.enable();
+        toast("Drag the pin to the right spot");
+      }
+    });
+    return el;
+  }
+
+  // ---------- list ----------
+  const list = document.getElementById("list");
+  function render() {
+    const vis = P.filter(visible);
+    const groups = {};
+    vis.forEach(p => (groups[p.hood] ||= []).push(p));
+    const hoods = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length || a.localeCompare(b));
+    list.innerHTML = hoods.length ? "" : `<div class="empty">${state.filter === "got" && !state.q ? "Nothing collected yet. Tap the little box next to a spot once you have its matches." : "No spots match that."}</div>`;
+    hoods.forEach(h => {
+      const head = document.createElement("div");
+      head.className = "hood";
+      head.innerHTML = `<span>${esc(h)}</span><span>${groups[h].length}</span>`;
+      list.appendChild(head);
+      groups[h].sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
+        const s = status(p);
+        const row = document.createElement("div");
+        row.className = "row" + (s === "out" ? " out" : "") + (state.sel === p.id ? " sel" : "");
+        row.dataset.id = p.id;
+        row.innerHTML = `
+          <button class="box" aria-pressed="${isGot(p)}" aria-label="Collected ${esc(p.name)}"></button>
+          <div><div class="nm">${esc(p.name)}${p.inside ? ` <em>in ${esc(p.inside)}</em>` : ""}</div><div class="ad">${esc(p.addr)}</div></div>
+          <span class="pill ${s}">${s === "got" ? "Got it" : s === "out" ? "Out " + esc(p.gone.replace(/(\w{3})\w* (\d{4})/, "$1 ’$2").replace("’20", "’")) : "Stocked"}</span>`;
+        list.appendChild(row);
+      });
+    });
+    document.getElementById("tGot").textContent = P.filter(isGot).length + " / " + P.length;
+    document.getElementById("tLive").textContent = P.filter(p => !isOut(p)).length;
+    document.getElementById("tOut").textContent = P.filter(isOut).length;
+    placeMarkers();
+  }
+  list.addEventListener("click", e => {
+    const row = e.target.closest(".row"); if (!row) return;
+    if (e.target.closest(".box")) { toggle(row.dataset.id); return; }
+    select(row.dataset.id, true);
+  });
+
+  function toggle(id) {
+    const p = byId[id];
+    if (state.collected[id]) { delete state.collected[id]; write("collected", id, null); toast("Unmarked " + p.name); }
+    else { state.collected[id] = new Date().toISOString(); write("collected", id, { at: state.collected[id] }); toast("Collected " + p.name + "!"); }
+    local.save(); render();
+  }
+  function select(id, fly) {
+    const prev = state.sel; state.sel = id;
+    if (prev !== id) render();
+    if (fly) {
+      const m = markers[id];
+      map.flyTo(where(byId[id]), Math.max(map.getZoom(), 15), { duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : .6 });
+      setTimeout(() => m.openPopup(), 650);
+    } else {
+      list.querySelector(`.row[data-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
+    }
+  }
+  map.on("popupclose", () => { state.sel = null; render(); });
+
+  document.querySelectorAll(".chips button").forEach(b => b.addEventListener("click", () => {
+    state.filter = b.dataset.f;
+    document.querySelectorAll(".chips button").forEach(o => o.setAttribute("aria-pressed", o === b));
+    try { localStorage.setItem(LS + "-filter", state.filter); } catch {}
+    render();
+  }));
+  try { const f = localStorage.getItem(LS + "-filter"); if (f) document.querySelector(`.chips [data-f="${f}"]`)?.click(); } catch {}
+  document.getElementById("q").addEventListener("input", e => { state.q = e.target.value.trim().toLowerCase(); render(); });
+
+  let tt;
+  function toast(msg) {
+    let t = document.querySelector(".toast");
+    if (!t) { t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); document.body.appendChild(t); }
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(tt); tt = setTimeout(() => { t.hidden = true; }, 2200);
+  }
+
+  render();
+  connectDb();
+})();
+</script>
