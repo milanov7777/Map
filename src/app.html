@@ -184,45 +184,63 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
   const state = { collected: {}, pins: {}, filter: "todo", area: null, q: "", sel: null, dragging: null };
 
   // ---------- storage: artifact db when available, else this browser ----------
+  // Each person's collection is their own: in the artifact store under their
+  // private data/users/<id>/ subtree when they're signed in with write access,
+  // otherwise in this browser. Pin fixes are shared, but only the owner's sync.
   const LS = "houston-matchbox-v1";
   const local = {
     load() { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch { return {}; } },
-    save() { try { localStorage.setItem(LS, JSON.stringify({ collected: state.collected, pins: state.pins })); } catch {} },
+    save() { try { localStorage.setItem(LS, JSON.stringify({ collected: state.collected, pins: myPins })); } catch {} },
   };
   const saved = local.load();
+  let myPins = saved.pins || {}, sharedPins = {};
   state.collected = saved.collected || {};
-  state.pins = saved.pins || {};
-  let db = null, canWrite = true;
+  state.pins = { ...myPins };
+  let db = null, myDoc = null, unsubMine = null, canPins = false;
   const saveNote = document.getElementById("saveNote");
   saveNote.textContent = "Progress is saved in this browser.";
 
   async function connectDb() {
     if (!window.claude?.use) return;
-    try { db = await window.claude.use("db"); } catch { db = null; }
+    let user = null;
+    try { [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]); } catch {}
     if (!db) return;
-    saveNote.textContent = "Progress syncs to your account.";
-    db.collection("collected").onSnapshot(snap => {
-      const next = {};
-      snap.docs.forEach(d => { if (d.exists) next[d.id] = d.data().at || true; });
-      // first sync: carry over anything ticked before the db answered
-      if (!connectDb.seeded) {
-        connectDb.seeded = true;
-        for (const id of Object.keys(state.collected)) if (!next[id] && byId[id]) { next[id] = state.collected[id]; write("collected", id, { at: state.collected[id] }); }
-      }
-      state.collected = next; local.save(); render();
-    }, () => {});
+    canPins = (await user?.isOwner().catch(() => false)) ?? false;
     db.collection("pins").onSnapshot(snap => {
-      const next = {};
-      snap.docs.forEach(d => { if (d.exists) { const v = d.data(); if (typeof v.lat === "number") next[d.id] = [v.lat, v.lng]; } });
-      state.pins = next; local.save(); placeMarkers();
+      sharedPins = {};
+      snap.docs.forEach(d => { if (d.exists) { const v = d.data(); if (typeof v.lat === "number") sharedPins[d.id] = [v.lat, v.lng]; } });
+      state.pins = canPins ? { ...sharedPins } : { ...sharedPins, ...myPins };
+      placeMarkers();
     }, () => {});
+    const uid = await user?.id().catch(() => null);
+    if (!uid) return;
+    myDoc = db.doc(`data/users/${uid}/collected`);
+    let first = true;
+    unsubMine = myDoc.onSnapshot(snap => {
+      const remote = (snap.exists && snap.data().ids) || {};
+      if (first) {
+        // carry over anything ticked in this browser before syncing
+        first = false;
+        const merged = { ...state.collected, ...remote };
+        state.collected = merged;
+        if (Object.keys(merged).length !== Object.keys(remote).length) saveMine();
+      } else state.collected = remote;
+      if (myDoc) saveNote.textContent = "Your progress syncs to your Claude account.";
+      local.save(); render();
+    }, goLocal);
   }
-  function write(col, id, data) {
-    if (!db || !canWrite) return;
-    const ref = db.collection(col).doc(id);
-    (data ? ref.set(data) : ref.delete()).catch(e => {
-      if (e?.code === "invalid_argument") { canWrite = false; saveNote.textContent = "You can view this map, but changes only save in your browser."; }
-    });
+  function goLocal() {
+    unsubMine?.(); unsubMine = null; myDoc = null;
+    saveNote.textContent = "Progress is saved in this browser.";
+  }
+  function saveMine() {
+    if (!myDoc) return;
+    const ids = Object.fromEntries(Object.entries(state.collected).filter(([id]) => byId[id]));
+    myDoc.set({ ids }).catch(goLocal);
+  }
+  function savePin(id, ll) {
+    if (canPins && db) db.collection("pins").doc(id).set({ lat: ll[0], lng: ll[1] }).catch(() => {});
+    else { myPins[id] = ll; local.save(); }
   }
 
   // ---------- derived ----------
@@ -303,8 +321,8 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
         m.on("popupopen", () => select(p.id, false));
         m.on("dragend", () => {
           const ll = m.getLatLng();
-          state.pins[p.id] = [ll.lat, ll.lng]; local.save();
-          write("pins", p.id, { lat: ll.lat, lng: ll.lng });
+          state.pins[p.id] = [ll.lat, ll.lng];
+          savePin(p.id, [ll.lat, ll.lng]);
           m.dragging.disable(); state.dragging = null; m.setIcon(icon(p));
           toast("Pin moved for " + p.name);
         });
@@ -408,9 +426,9 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
 
   function toggle(id) {
     const p = byId[id];
-    if (state.collected[id]) { delete state.collected[id]; write("collected", id, null); toast("Unmarked " + p.name); }
-    else { state.collected[id] = new Date().toISOString(); write("collected", id, { at: state.collected[id] }); toast("Collected " + p.name + "!"); }
-    local.save(); render();
+    if (state.collected[id]) { delete state.collected[id]; toast("Unmarked " + p.name); }
+    else { state.collected[id] = new Date().toISOString(); toast("Collected " + p.name + "!"); }
+    local.save(); saveMine(); render();
   }
   function select(id, fly) {
     const prev = state.sel; state.sel = id;
