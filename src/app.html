@@ -249,13 +249,18 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
   const map = L.map("map", { zoomControl: true, preferCanvas: false, minZoom: 10, maxZoom: 18 }).setView([29.765, -95.42], 12);
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const base = L.layerGroup().addTo(map);
+  map.createPane("minor").style.zIndex = 350;   // side streets sit under parks, bayous and main roads
+  map.createPane("parks").style.zIndex = 340;
+  const minorLayer = L.layerGroup();
   function drawBase() {
     base.clearLayers();
     const R = window.ROADS;
     const line = (pts, color, weight) => L.polyline(pts, { color, weight, opacity: 1, interactive: false, lineCap: "round", lineJoin: "round" }).addTo(base);
-    R.parks.forEach(pk => L.polygon(pk.pts, { stroke: false, fillColor: css("--park"), fillOpacity: 1, interactive: false, smoothFactor: 2 }).addTo(base));
+    R.parks.forEach(pk => L.polygon(pk.pts, { stroke: false, fillColor: css("--park"), fillOpacity: 1, interactive: false, smoothFactor: 2, pane: "parks" }).addTo(base));
     R.bayous.forEach(b => line(b.pts, css("--water"), 5));
-    R.streets.forEach(st => line(st.pts, css("--road-edge"), 2));
+    minorLayer.clearLayers();
+    R.minor.forEach(pts => L.polyline(pts, { color: css("--road-edge"), weight: 1, opacity: .8, interactive: false, pane: "minor" }).addTo(minorLayer));
+    R.streets.forEach(st => line(st.pts, css("--road-edge"), 2.5));
     const fw = [R.loop, ...R.freeways.map(f => f.pts)];
     fw.forEach(pts => line(pts, css("--road-edge"), 7));
     fw.forEach(pts => line(pts, css("--road"), 4.5));
@@ -268,7 +273,7 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
   }
   drawBase();
   // Name labels beside pins once zoomed in far enough for them not to pile up.
-  const syncLabels = () => { const c = map.getContainer().classList, z = map.getZoom(); c.toggle("labels-on", z >= 16); c.toggle("far", z < 13); };
+  const syncLabels = () => { const c = map.getContainer().classList, z = map.getZoom(); c.toggle("labels-on", z >= 16); c.toggle("far", z < 13); if (map.hasLayer(base)) { if (z >= 14) minorLayer.addTo(map); else minorLayer.remove(); } };
   map.on("zoomend", syncLabels); syncLabels();
 
   // Real streets where the browser is allowed to load them (outside claude.ai).
@@ -276,7 +281,7 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
     subdomains: "abcd", maxZoom: 19,
   });
   tiles.once("tileload", () => {
-    map.removeLayer(base);
+    map.removeLayer(base); minorLayer.remove();
     map.attributionControl.addAttribution('&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>');
   });
   tiles.addTo(map);
