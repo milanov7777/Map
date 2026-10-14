@@ -106,13 +106,17 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
 /* popup */
 .leaflet-popup-content-wrapper { background: var(--panel); color: var(--ink); border-radius: 14px; box-shadow: 0 6px 24px rgb(35 51 31 / .18); }
 .leaflet-popup-tip { background: var(--panel); }
-.leaflet-popup-content { margin: 16px 18px; font-family: var(--body); font-size: 13.5px; line-height: 1.45; min-width: 220px; }
+.leaflet-popup-content { margin: 16px 18px; font-family: var(--body); font-size: 13.5px; line-height: 1.45; min-width: 250px; }
 .leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
 .pop h3 { margin: 2px 0 2px; font-family: var(--display); font-weight: 500; font-size: 26px; line-height: 1.05; }
 .pop .k { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .14em; color: var(--head); }
 .pop .a { font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 8px 0 8px; }
 .pop .n { margin: 0 0 6px; }
 .pop .warn { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+.pop .look { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+.pop .look a { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 9px 4px 7px; border-radius: 10px; background: color-mix(in srgb, var(--park) 45%, var(--panel)); color: var(--ink); text-decoration: none; font: 600 11px var(--body); letter-spacing: .02em; }
+.pop .look a:hover { background: var(--park); }
+.pop .look svg { width: 20px; height: 20px; fill: none; stroke: var(--forest); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .pop .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .pop .acts button, .pop .acts a { font: 600 12.5px var(--body); padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip); color: var(--ink); cursor: pointer; text-decoration: none; }
 .pop .acts .primary { background: var(--forest); color: var(--panel); border-color: var(--forest); }
@@ -261,6 +265,17 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
     return true;
   }
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const q = p => encodeURIComponent(p.name + " " + p.addr.split(",")[0] + " Houston TX");
+  const isShop = p => /shop|clothing|gifts|salon|menswear/i.test(p.kind || "");
+  // Photos of other sites can't be shown inside the page, so each lookup opens in a new tab.
+  const looks = p => [
+    isShop(p)
+      ? ["Website", "https://www.google.com/search?q=" + q(p), "M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18"]
+      : ["Menu", "https://www.google.com/search?q=" + q(p) + "%20menu", "M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"],
+    ["Photos", "https://www.google.com/search?tbm=isch&q=" + q(p), "M3 6h18v13H3zM7 15l3-4 3 3 2-2 3 3M8.5 9.5h.01"],
+    ["Reviews", "https://www.yelp.com/search?find_desc=" + encodeURIComponent(p.name) + "&find_loc=" + encodeURIComponent(p.addr + ", Houston, TX"), "M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"],
+    ["Directions", gmaps(p), "M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21zM12 9.5h.01"],
+  ];
   const gmaps = p => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.name + ", " + p.addr + ", Houston, TX");
 
   // ---------- map ----------
@@ -349,9 +364,11 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
       ${p.gone ? `<p class="n"><strong>Reported out of matches, ${esc(p.gone)}.</strong> Worth asking anyway.</p>` : ""}
       ${siblings.length ? `<p class="warn">Same address: ${siblings.map(esc).join(", ")}.</p>` : ""}
       ${p.approx && !state.pins[p.id] ? `<p class="warn">Pin is an estimate. Use Directions for the exact spot, or Move pin to fix it.</p>` : ""}
+      <div class="look">
+        ${looks(p).map(([label, href, d]) => `<a href="${href}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>${label}</a>`).join("")}
+      </div>
       <div class="acts">
         <button class="primary ${got ? "on" : ""}" data-a="toggle">${got ? "Collected ✓" : "Mark collected"}</button>
-        <a href="${gmaps(p)}" target="_blank" rel="noopener">Directions</a>
         <button data-a="move">Move pin</button>
         ${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">Website</a>` : ""}
       </div>`;
