@@ -78,3 +78,31 @@ window.PLACES = [
   { id: "voodoo-queen", name: "Voodoo Queen", addr: "322 Milby St.", hood: "EaDo", lat: 29.7445, lng: -95.3390, note: "Matches with its name", gone: "December 2025", approx: true },
   { id: "warrens", name: "Warren’s Inn", addr: "307 Travis St.", hood: "Downtown", lat: 29.7632, lng: -95.3606, note: "Matches with its name" },
 ];
+
+// Food type for each spot, from general knowledge of the places (not checked
+// against menus). `?` marks a best guess.
+(() => {
+  const CAT = {
+    "Steakhouse": "bb-butchers doris guard-grace pappas-bros prime-131",
+    "Seafood": "balboa bar-bludorn clarks littles navy-blue",
+    "Italian & Pizza": "bari? capones home-slice rosie-cannonball tavola trattoria-sofia",
+    "Mexican & Latin": "emilias los-tios maximo? pistoleros",
+    "Asian": "bar-doko? le-colonial leemoo? loro uchi uchiko",
+    "French & European": "annabelle brasserie-19 marigold-club perseid squable?",
+    "Mediterranean & Spanish": "barcelona march",
+    "Southern & Cajun": "credence? la-lucha state-of-grace",
+    "American": "angies? annie daily-gather? kirkwood? miltons? turners",
+    "Bars": "anvil betelgeuse foxhearts drakes eight-row gold-brick hypsi? la-carafe lazy-lane? lees lei-low little-dipper johnny-mcelroys monkeys-tail nickel-city poison-girl sante shay-mcelroys star-rover starduster voodoo-queen warrens",
+    "Hotels": "hotel-daphne colombe-dor saint-augustine",
+    "Shops": "all-the-feels buck-mason genara marigold-salon mizzen-main montrose-cheese tommy-bahama",
+  };
+  window.CATEGORIES = Object.keys(CAT);
+  const byId = Object.fromEntries(window.PLACES.map(p => [p.id, p]));
+  for (const [cat, ids] of Object.entries(CAT)) for (const raw of ids.split(" ")) {
+    const p = byId[raw.replace("?", "")];
+    if (!p) throw new Error("Unknown place id in categories: " + raw);
+    p.cat = cat; p.catGuess = raw.endsWith("?");
+  }
+  const missing = window.PLACES.filter(p => !p.cat).map(p => p.id);
+  if (missing.length) throw new Error("No category for: " + missing.join(", "));
+})();
