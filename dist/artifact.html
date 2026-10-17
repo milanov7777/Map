@@ -723,6 +723,8 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
 .areas { display: flex; gap: 6px; overflow-x: auto; padding: 10px 16px; border-bottom: 1px solid var(--line); scrollbar-width: none; }
 .areas::-webkit-scrollbar { display: none; }
 .cats { padding-top: 0; }
+.areas .g { width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sub button { font-size: 12px; padding: 5px 10px; }
 .cats button { border-style: dashed; }
 .areas.cats button[aria-pressed="true"] { background: var(--forest); border: 1px solid var(--forest); color: var(--panel); }
 .areas.cats button[aria-pressed="true"] span { color: var(--panel); opacity: .7; }
@@ -755,7 +757,10 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
 .foot .dot:first-child { margin-left: 0; }
 
 /* pins */
-.pin { width: 20px; height: 20px; border-radius: 50%; background: var(--head); border: 2.5px solid var(--panel); box-shadow: 0 1px 3px rgb(35 51 31 / .3); box-sizing: border-box; }
+.pin { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--head); border: 2.5px solid var(--panel); box-shadow: 0 1px 3px rgb(35 51 31 / .3); box-sizing: border-box; }
+.pin .g { width: 12px; height: 12px; fill: none; stroke: var(--panel); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.pin.got .g { stroke: var(--sulfur-ink); }
+.pin.out .g { stroke: var(--out); }
 .pin.out { background: var(--panel); border: 2px dashed var(--out); box-shadow: none; }
 .pin.got { background: var(--sulfur); border-color: var(--sulfur-ink); border-width: 2px; }
 .pin.sel { background: var(--forest); transform: scale(1.35); }
@@ -795,7 +800,8 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--forest); color: var(--panel); padding: 9px 16px; border-radius: 999px; font-weight: 600; z-index: 1000; font-size: 13px; }
 
 @media (max-width: 760px) {
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 38% minmax(0, 1fr); }
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 33% minmax(0, 1fr); }
+  .showing { padding-top: 5px; padding-bottom: 5px; }
   .controls { padding-top: 10px; padding-bottom: 8px; gap: 8px; }
   #q { padding: 7px 12px; }
   .areas { padding-top: 8px; padding-bottom: 8px; }
@@ -831,7 +837,8 @@ aside { background: var(--panel); border-left: 1px solid var(--line); display: f
       </div>
     </div>
     <div class="areas" id="areas" role="group" aria-label="Neighborhood"></div>
-    <div class="areas cats" id="cats" role="group" aria-label="Type of food"></div>
+    <div class="areas cats" id="groups" role="group" aria-label="Kind of place"></div>
+    <div class="areas cats sub" id="cats" role="group" aria-label="Style" hidden></div>
     <div class="showing" id="showing" hidden><span id="showingText"></span><button id="showAll">Show all</button></div>
     <div class="list" id="list"></div>
     <div class="foot" id="foot">
@@ -926,29 +933,38 @@ window.PLACES = [
   { id: "warrens", name: "Warren’s Inn", addr: "307 Travis St.", hood: "Downtown", lat: 29.7632, lng: -95.3606, note: "Matches with its name" },
 ];
 
-// Food type for each spot, from general knowledge of the places (not checked
-// against menus). `?` marks a best guess.
+// What kind of place each spot is, from general knowledge of the places (not
+// checked against menus). `?` marks a best guess. Each group splits into
+// styles; `one` is how a single place of that style is labeled.
 (() => {
-  const CAT = {
-    "Steakhouse": "bb-butchers doris guard-grace pappas-bros prime-131",
-    "Seafood": "balboa bar-bludorn clarks littles navy-blue",
-    "Italian & Pizza": "bari? capones home-slice rosie-cannonball tavola trattoria-sofia",
-    "Mexican & Latin": "emilias los-tios maximo? pistoleros",
-    "Asian": "bar-doko? le-colonial leemoo? loro uchi uchiko",
-    "French & European": "annabelle brasserie-19 marigold-club perseid squable?",
-    "Mediterranean & Spanish": "barcelona march",
-    "Southern & Cajun": "credence? la-lucha state-of-grace",
-    "American": "angies? annie daily-gather? kirkwood? miltons? turners",
-    "Bars": "anvil betelgeuse foxhearts drakes eight-row gold-brick hypsi? la-carafe lazy-lane? lees lei-low little-dipper johnny-mcelroys monkeys-tail nickel-city poison-girl sante shay-mcelroys star-rover starduster voodoo-queen warrens",
-    "Hotels": "hotel-daphne colombe-dor saint-augustine",
-    "Shops": "all-the-feels buck-mason genara marigold-salon mizzen-main montrose-cheese tommy-bahama",
+  const GROUPS = {
+    Restaurants: {
+      "Steakhouses": ["Steakhouse", "bb-butchers doris guard-grace pappas-bros prime-131"],
+      "Seafood": ["Seafood", "balboa bar-bludorn clarks littles navy-blue"],
+      "Italian & Pizza": ["Italian & pizza", "bari? capones home-slice rosie-cannonball tavola trattoria-sofia"],
+      "Mexican & Latin": ["Mexican & Latin", "emilias los-tios maximo? pistoleros"],
+      "Asian": ["Asian", "bar-doko? le-colonial leemoo? loro uchi uchiko"],
+      "French & European": ["French & European", "annabelle brasserie-19 marigold-club perseid squable?"],
+      "Mediterranean & Spanish": ["Mediterranean & Spanish", "barcelona march"],
+      "Southern & Cajun": ["Southern & Cajun", "credence? la-lucha state-of-grace"],
+      "American": ["American", "angies? annie daily-gather? kirkwood? miltons? turners"],
+    },
+    Bars: {
+      "Cocktail bars": ["Cocktail bar", "anvil betelgeuse foxhearts gold-brick hypsi? lees? lei-low starduster voodoo-queen?"],
+      "Dive & neighborhood": ["Dive bar", "little-dipper lazy-lane? monkeys-tail nickel-city poison-girl star-rover? warrens"],
+      "Pubs & icehouses": ["Pub", "eight-row johnny-mcelroys shay-mcelroys"],
+      "Wine bars & lounges": ["Lounge", "drakes la-carafe sante"],
+    },
+    Shops: { "Shops": ["Shop", "all-the-feels buck-mason genara marigold-salon mizzen-main montrose-cheese tommy-bahama"] },
+    Hotels: { "Hotels": ["Hotel", "hotel-daphne colombe-dor saint-augustine"] },
   };
-  window.CATEGORIES = Object.keys(CAT);
+  window.GROUPS = Object.fromEntries(Object.entries(GROUPS).map(([g, cats]) => [g, Object.keys(cats)]));
   const byId = Object.fromEntries(window.PLACES.map(p => [p.id, p]));
-  for (const [cat, ids] of Object.entries(CAT)) for (const raw of ids.split(" ")) {
+  for (const [group, cats] of Object.entries(GROUPS)) for (const [cat, [one, ids]] of Object.entries(cats)) for (const raw of ids.split(" ")) {
     const p = byId[raw.replace("?", "")];
     if (!p) throw new Error("Unknown place id in categories: " + raw);
-    p.cat = cat; p.catGuess = raw.endsWith("?");
+    if (p.cat) throw new Error("Place in two categories: " + raw);
+    Object.assign(p, { group, cat, label: p.kind || one, catGuess: raw.endsWith("?") });
   }
   const missing = window.PLACES.filter(p => !p.cat).map(p => p.id);
   if (missing.length) throw new Error("No category for: " + missing.join(", "));
@@ -1072,7 +1088,7 @@ window.ROADS = {
 (() => {
   const P = window.PLACES;
   const byId = Object.fromEntries(P.map(p => [p.id, p]));
-  const state = { collected: {}, pins: {}, filter: "todo", area: null, cat: null, q: "", sel: null, dragging: null };
+  const state = { collected: {}, pins: {}, filter: "todo", area: null, group: null, cat: null, q: "", sel: null, dragging: null };
 
   // ---------- storage: artifact db when available, else this browser ----------
   // Each person's collection is their own: in the artifact store under their
@@ -1140,19 +1156,28 @@ window.ROADS = {
   const where = p => state.pins[p.id] || [p.lat, p.lng];
   function status(p) { return isGot(p) ? "got" : isOut(p) ? "out" : "live"; }
   const inArea = p => !state.area || p.hood === state.area;
+  const inGroup = p => !state.group || p.group === state.group;
   const inCat = p => !state.cat || p.cat === state.cat;
-  function visible(p) { return passes(p) && inArea(p) && inCat(p); }
+  function visible(p) { return passes(p) && inArea(p) && inGroup(p) && inCat(p); }
   function passes(p) {
     const f = state.filter;
     if (f === "todo" && isGot(p)) return false;
     if (f === "got" && !isGot(p)) return false;
     if (f === "out" && !isOut(p)) return false;
     if (state.q) {
-      const hay = (p.name + " " + p.addr + " " + p.hood + " " + (p.kind || "") + " " + (p.inside || "") + " " + p.cat).toLowerCase();
+      const hay = (p.name + " " + p.addr + " " + p.hood + " " + (p.kind || "") + " " + (p.inside || "") + " " + p.group + " " + p.cat + " " + p.label).toLowerCase();
       if (!state.q.split(/\s+/).every(t => hay.includes(t))) return false;
     }
     return true;
   }
+  // Tiny line icons for each kind of place: fork and knife, glass, bag, bed.
+  const GLYPHS = {
+    eat: "M8 3v8M6 3v5a2 2 0 0 0 4 0V3M8 11v10M16 21V3c-2 1.5-3 4-3 7h3",
+    drink: "M6 4h12l-6 8zM12 12v8M8.5 20h7",
+    shop: "M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2",
+    stay: "M3 18V7M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5M7 11.5h.01",
+  };
+  const glyph = k => `<svg class="g" viewBox="0 0 24 24" aria-hidden="true"><path d="${GLYPHS[k]}"/></svg>`;
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const q = p => encodeURIComponent(p.name + " " + p.addr.split(",")[0] + " Houston TX");
   const isShop = p => /shop|clothing|gifts|salon|menswear/i.test(p.kind || "");
@@ -1213,7 +1238,7 @@ window.ROADS = {
     const cls = ["pin", status(p)];
     if (state.sel === p.id) cls.push("sel");
     if (state.dragging === p.id) cls.push("drag");
-    return L.divIcon({ className: "", html: `<div class="${cls.join(" ")}"></div>`, iconSize: [20, 20], iconAnchor: [10, 10], popupAnchor: [0, -12] });
+    return L.divIcon({ className: "", html: `<div class="${cls.join(" ")}">${glyph(GROUP_ICON[p.group])}</div>`, iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -13] });
   }
   function placeMarkers() {
     P.forEach(p => {
@@ -1221,7 +1246,7 @@ window.ROADS = {
       if (!m) {
         m = markers[p.id] = L.marker(where(p), { icon: icon(p), title: p.name, riseOnHover: true });
         m.bindPopup(() => popup(p), { autoPanPadding: [30, 30] });
-        m.bindTooltip(`<small>${esc(p.kind || p.cat)}</small><b>${esc(p.name)}</b>`, { permanent: true, direction: "right", offset: [12, 0], className: "plabel", interactive: false });
+        m.bindTooltip(`<small>${esc(p.label)}</small><b>${esc(p.name)}</b>`, { permanent: true, direction: "right", offset: [12, 0], className: "plabel", interactive: false });
         m.on("popupopen", () => select(p.id, false));
         m.on("dragend", () => {
           const ll = m.getLatLng();
@@ -1245,13 +1270,13 @@ window.ROADS = {
     const got = isGot(p);
     const siblings = P.filter(o => o.id !== p.id && o.addr === p.addr).map(o => o.name);
     el.innerHTML = `
-      <div class="k">${esc(p.hood)} · ${esc(p.kind || p.cat)}</div>
+      <div class="k">${esc(p.hood)} · ${esc(p.label)}</div>
       <h3>${esc(p.name)}</h3>
       ${p.inside ? `<div class="k">Inside ${esc(p.inside)}</div>` : ""}
       <div class="a">${esc(p.addr)}</div>
       <p class="n">${esc(p.note)}.</p>
       ${p.gone ? `<p class="n"><strong>Reported out of matches, ${esc(p.gone)}.</strong> Worth asking anyway.</p>` : ""}
-      ${p.catGuess ? `<p class="warn">Listed under ${esc(p.cat)} as a best guess.</p>` : ""}
+      ${p.catGuess ? `<p class="warn">Listed as ${esc(p.label.toLowerCase())} as a best guess.</p>` : ""}
       ${siblings.length ? `<p class="warn">Same address: ${siblings.map(esc).join(", ")}.</p>` : ""}
       ${p.approx && !state.pins[p.id] ? `<p class="warn">Pin is an estimate. Use Directions for the exact spot, or Move pin to fix it.</p>` : ""}
       <div class="look">
@@ -1276,26 +1301,34 @@ window.ROADS = {
 
   // ---------- list ----------
   const list = document.getElementById("list");
-  // Two chip rows: neighborhood, then type of food. Each row's counts respect the other row's pick.
+  // Chip rows: neighborhood, then kind of place, then (for restaurants and
+  // bars) its style. Each row's counts respect the picks in the other rows.
+  const GROUP_ICON = { Restaurants: "eat", Bars: "drink", Shops: "shop", Hotels: "stay" };
   const rows = [
-    { el: document.getElementById("areas"), key: "area", all: "All areas", field: "hood", other: inCat, order: null },
-    { el: document.getElementById("cats"), key: "cat", all: "All types", field: "cat", other: inArea, order: window.CATEGORIES },
+    { el: document.getElementById("areas"), key: "area", all: () => "All areas", field: "hood", other: p => inGroup(p) && inCat(p) },
+    { el: document.getElementById("groups"), key: "group", all: () => "Everything", field: "group", other: inArea, order: () => Object.keys(window.GROUPS), icons: true },
+    { el: document.getElementById("cats"), key: "cat", all: () => "All " + state.group.toLowerCase(), field: "cat", other: p => inArea(p) && inGroup(p),
+      order: () => window.GROUPS[state.group], show: () => state.group && window.GROUPS[state.group].length > 1 },
   ];
   function renderAreas() {
     rows.forEach(r => {
+      if (r.show && !r.show()) { r.el.hidden = true; return; }
+      r.el.hidden = false;
       const counts = {};
       P.filter(p => passes(p) && r.other(p)).forEach(p => counts[p[r.field]] = (counts[p[r.field]] || 0) + 1);
       const sel = state[r.key];
       if (sel && !counts[sel]) counts[sel] = 0;
-      const names = r.order ? r.order.filter(n => n in counts) : Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+      const names = r.order ? r.order().filter(n => n in counts) : Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
       const total = names.reduce((n, h) => n + counts[h], 0);
-      r.el.innerHTML = [`<button data-v="" aria-pressed="${!sel}">${r.all}<span>${total}</span></button>`]
-        .concat(names.map(h => `<button data-v="${esc(h)}" aria-pressed="${sel === h}">${esc(h)}<span>${counts[h]}</span></button>`)).join("");
+      const ic = h => r.icons ? glyph(GROUP_ICON[h]) : "";
+      r.el.innerHTML = [`<button data-v="" aria-pressed="${!sel}">${r.all()}<span>${total}</span></button>`]
+        .concat(names.map(h => `<button data-v="${esc(h)}" aria-pressed="${sel === h}">${ic(h)}${esc(h)}<span>${counts[h]}</span></button>`)).join("");
     });
   }
   rows.forEach(r => r.el.addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     state[r.key] = b.dataset.v || null;
+    if (r.key === "group") state.cat = null;
     render();
     list.scrollTop = 0;
     const pts = P.filter(visible).map(where);
@@ -1307,7 +1340,7 @@ window.ROADS = {
     const vis = P.filter(visible);
     const hidden = P.length - vis.length;
     document.getElementById("showing").hidden = hidden === 0;
-    document.getElementById("showingText").textContent = `Showing ${vis.length} of ${P.length}` + (state.filter === "todo" && !state.area && !state.cat && !state.q ? " (collected ones are hidden)" : "");
+    document.getElementById("showingText").textContent = `Showing ${vis.length} of ${P.length}` + (state.filter === "todo" && !state.area && !state.group && !state.q ? " (collected ones are hidden)" : "");
     const groups = {};
     vis.forEach(p => (groups[p.hood] ||= []).push(p));
     const hoods = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length || a.localeCompare(b));
@@ -1324,7 +1357,7 @@ window.ROADS = {
         row.dataset.id = p.id;
         row.innerHTML = `
           <button class="box" aria-pressed="${isGot(p)}" aria-label="Collected ${esc(p.name)}"></button>
-          <div><div class="nm">${esc(p.name)}${p.inside ? ` <em>in ${esc(p.inside)}</em>` : ""}</div><div class="ad">${esc(p.addr)} · ${esc(p.cat)}</div></div>
+          <div><div class="nm">${esc(p.name)}${p.inside ? ` <em>in ${esc(p.inside)}</em>` : ""}</div><div class="ad">${esc(p.addr)} · ${esc(p.label)}</div></div>
           <span class="pill ${s}">${s === "got" ? "Got it" : s === "out" ? "Out " + esc(p.gone.replace(/(\w{3})\w* (\d{4})/, "$1 ’$2").replace("’20", "’")) : "Stocked"}</span>`;
         list.appendChild(row);
       });
@@ -1365,7 +1398,7 @@ window.ROADS = {
     render();
   }));
   document.getElementById("showAll").addEventListener("click", () => {
-    state.area = null; state.cat = null; state.q = ""; document.getElementById("q").value = "";
+    state.area = null; state.group = null; state.cat = null; state.q = ""; document.getElementById("q").value = "";
     document.querySelector('.chips [data-f="all"]').click();
     map.flyToBounds(P.map(where), { padding: [30, 30], duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : .6 });
   });
